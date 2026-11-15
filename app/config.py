@@ -65,6 +65,16 @@ OFFSET_SAMPLES = {
     "device_offsets": ("device_offsets.csv", "设备偏移表"),
 }
 
+# 夜班滚动发布：每 10 分钟交付一次 15 分钟窗口（M8 增量采信 / 迟到补批）
+PUBLISH_CADENCE_MINUTES = 10
+
+# 夜班自带补批样例：key -> (相对 sample_data 的路径, 中文标题)
+NIGHT_SAMPLES = {
+    "night_batch_a": ("night_shift/night_batch_a.csv", "夜班首批 00:00–00:11"),
+    "night_batch_b": ("night_shift/night_batch_b.csv", "夜班二批 00:12–00:26"),
+    "night_batch_c_late": ("night_shift/night_batch_c_late.csv", "夜班迟到补批（回填/覆盖）"),
+}
+
 
 def db_path() -> Path:
     raw = os.environ.get("GRIDLAB_DB")
@@ -83,3 +93,9 @@ def offset_file(key: str) -> Path:
     if key not in OFFSET_SAMPLES:
         raise KeyError(key)
     return SAMPLE_DIR / OFFSET_SAMPLES[key][0]
+
+
+def night_file(key: str) -> Path:
+    if key not in NIGHT_SAMPLES:
+        raise KeyError(key)
+    return SAMPLE_DIR / NIGHT_SAMPLES[key][0]

@@ -1,0 +1,5 @@
+sensor_id,sampled_at,offset_seconds,value,unit,quality,ingest_seq
+TH-01,2026-03-01T00:08:20Z,20,47.2,%RH,good,301
+PM-02,2026-03-01T00:01:30Z,90,38.7,µg/m³,good,302
+TH-01,2026-03-01T00:13:20Z,20,47.6,%RH,good,303
+PM-02,2026-03-01T00:16:30Z,90,40.5,µg/m³,suspect,304

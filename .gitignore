@@ -29,3 +29,6 @@ target/
 *.o
 *.obj
 .DS_Store
+
+# 运行时 SQLite 库（M1–M8 落库目录，由命名卷或本地 data/ 承载）
+data/

@@ -34,6 +34,16 @@ def conn():
         store.reset()
 
 
+@pytest.fixture(autouse=True)
+def _reset_publish_fault_switch():
+    """每个测试前后都复位 M8 发布故障注入开关，避免全局状态跨用例泄漏。"""
+    from app.modules.m8_publish import service as publish_service
+
+    publish_service.FAIL_BEFORE_COMMIT = False
+    yield
+    publish_service.FAIL_BEFORE_COMMIT = False
+
+
 @pytest.fixture()
 def run_main(conn):
     return batch_service.execute_run(

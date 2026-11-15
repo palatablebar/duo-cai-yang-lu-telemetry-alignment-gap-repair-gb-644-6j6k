@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}夜班发布{% endblock %}
+{% block statusline %}{{ reconcile.conclusion }}{% endblock %}
+
+{% block body %}
+<section class="sheet-head">
+  <h1 class="h1">夜班滚动发布 · 15 分钟窗口</h1>
+  <div class="head-tools">
+    <a class="link" href="/api/publish/reconcile">五账 JSON</a>
+    <a class="link" href="/api/publish/export/manifest.json">发布清单</a>
+  </div>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2 class="h2">补批采信（原始记录只追加）</h2>
+    <span class="block-meta mono">每 10 分钟可发布一次</span>
+  </div>
+  <form class="import" id="ingest-night-form" autocomplete="off">
+    <label class="field">
+      <span class="field-k">夜班样例</span>
+      <select id="night-sample">
+        <option value="night_batch_a">首批 00:00–00:11</option>
+        <option value="night_batch_b">二批 00:12–00:26</option>
+        <option value="night_batch_c_late">迟到补批（回填/覆盖）</option>
+      </select>
+    </label>
+    <button class="btn" type="submit" id="ingest-night-btn">采信补批</button>
+    <span class="hint" id="ingest-night-hint" role="status"></span>
+  </form>
+  <form class="import" id="publish-form" autocomplete="off" style="margin-top:8px">
+    <label class="field">
+      <span class="field-k">发布截止点</span>
+      <input type="text" id="publish-cutoff" placeholder="留空 = 最近完整窗口，如 2026-03-01T00:15:00Z">
+    </label>
+    <label class="field">
+      <span class="field-k">备注</span>
+      <input type="text" id="publish-note" placeholder="巡检发布">
+    </label>
+    <button class="btn" type="submit" id="publish-btn">发布窗口</button>
+    <span class="hint" id="publish-hint" role="status"></span>
+  </form>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2 class="h2">补批清单</h2>
+    <span class="block-meta mono">{{ batches.count }} 批 · 原始 {{ batches.raw_total }} 行</span>
+  </div>
+  <div class="scroll">
+    <table class="sheet-grid wide" data-sheet>
+      <thead>
+        <tr class="letters"><th class="gutter"></th><th>A</th><th>B</th><th>C</th><th class="num">D</th><th class="num">E</th><th class="num">F</th><th class="num">G</th><th>H</th></tr>
+        <tr class="cols"><th class="gutter">#</th><th>补批号</th><th>名称</th><th>到达</th><th class="num">原始</th><th class="num">采信</th><th class="num">重复</th><th class="num">隔离</th><th>迟到</th></tr>
+      </thead>
+      <tbody>
+        {% for b in batches.batches %}
+        <tr>
+          <th class="gutter">{{ loop.index }}</th>
+          <td tabindex="0" class="mono">{{ b.batch_id }}</td>
+          <td tabindex="0">{{ b.label }}</td>
+          <td tabindex="0" class="mono">{{ b.received_at|f_utc("%m-%d %H:%M") }}</td>
+          <td tabindex="0" class="num">{{ b.raw_rows }}</td>
+          <td tabindex="0" class="num">{{ b.accepted }}</td>
+          <td tabindex="0" class="num">{{ b.duplicates }}</td>
+          <td tabindex="0" class="num">{{ b.quarantined }}</td>
+          <td tabindex="0"><span class="tag {{ 'bad' if b.is_late_batch else 'ok' }}">{{ "迟到补批" if b.is_late_batch else "常规" }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty-text">还没有补批。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2 class="h2">发布时间线</h2>
+    <span class="block-meta mono">{{ publishes.count }} 次发布</span>
+  </div>
+  <div class="scroll">
+    <table class="sheet-grid wide" data-sheet>
+      <thead>
+        <tr class="letters"><th class="gutter"></th><th>A</th><th>B</th><th>C</th><th class="num">D</th><th class="num">E</th><th class="num">F</th><th class="num">G</th></tr>
+        <tr class="cols"><th class="gutter">#</th><th>发布号</th><th>时间</th><th>截止点</th><th class="num">窗口</th><th class="num">新版</th><th class="num">修订</th><th class="num">不变</th></tr>
+      </thead>
+      <tbody>
+        {% for p in publishes.publishes %}
+        <tr>
+          <th class="gutter">{{ p.publish_seq }}</th>
+          <td tabindex="0" class="mono">{{ p.publish_id }}</td>
+          <td tabindex="0" class="mono">{{ p.created_at|f_utc("%m-%d %H:%M") }}</td>
+          <td tabindex="0" class="mono">{{ p.cutoff_utc|f_utc("%H:%M") }}</td>
+          <td tabindex="0" class="num">{{ p.window_count }}</td>
+          <td tabindex="0" class="num">{{ p.new_versions }}</td>
+          <td tabindex="0" class="num">{{ p.revised_versions }}</td>
+          <td tabindex="0" class="num">{{ p.unchanged_versions }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty-text">还没有发布。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2 class="h2">当前已发布窗口（含每格采样来源）</h2>
+    <span class="block-meta mono">{{ current.count }} 个窗口·传感器</span>
+  </div>
+  <div class="scroll">
+    <table class="sheet-grid wide" data-sheet>
+      <thead>
+        <tr class="letters"><th class="gutter"></th><th>A</th><th>B</th><th class="num">C</th><th class="num">D</th><th class="num">E</th><th class="num">F</th><th>G</th><th>H</th><th>I</th></tr>
+        <tr class="cols"><th class="gutter">#</th><th>窗口</th><th>传感器</th><th class="num">实有</th><th class="num">补齐</th><th class="num">缺口</th><th class="num">覆盖</th><th>实有合计</th><th>状态</th><th>版本</th></tr>
+      </thead>
+      <tbody>
+        {% for w in current.windows %}
+        <tr>
+          <th class="gutter">{{ loop.index }}</th>
+          <td tabindex="0" class="mono">{{ w.window_start|f_utc("%H:%M") }}–{{ w.window_end|f_utc("%H:%M") }}</td>
+          <td tabindex="0">{{ w.sensor_id }}</td>
+          <td tabindex="0" class="num">{{ w.observed }}</td>
+          <td tabindex="0" class="num">{{ w.filled }}</td>
+          <td tabindex="0" class="num">{{ w.gaps }}</td>
+          <td tabindex="0" class="num">{{ w.coverage|f_pct }}</td>
+          <td tabindex="0" class="num">{{ w.observed_sum|f_num }}</td>
+          <td tabindex="0"><span class="tag {{ 'bad' if w.state == 'PARTIAL' else 'ok' }}">{{ w.state }}</span></td>
+          <td tabindex="0" class="mono"><a class="link" href="/api/publish/windows/history?window_start={{ w.window_start }}&sensor_id={{ w.sensor_id }}">{{ w.version_id[:18] }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty-text">还没有已发布窗口。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2 class="h2">五账核对</h2>
+    <span class="block-meta mono">{{ reconcile.conclusion }}</span>
+  </div>
+  <div class="scroll">
+    <table class="sheet-grid" data-sheet>
+      <thead>
+        <tr class="letters"><th class="gutter"></th><th>A</th><th class="num">B</th><th class="num">C</th><th class="num">D</th><th>E</th><th>F</th></tr>
+        <tr class="cols"><th class="gutter">#</th><th>账</th><th class="num">应有</th><th class="num">实得</th><th class="num">差额</th><th>状态</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        {% for line in reconcile.lines %}
+        <tr>
+          <th class="gutter">{{ loop.index }}</th>
+          <td tabindex="0">{{ line.name }}</td>
+          <td tabindex="0" class="num">{{ line.expected }}</td>
+          <td tabindex="0" class="num">{{ line.actual }}</td>
+          <td tabindex="0" class="num">{{ line.delta }}</td>
+          <td tabindex="0"><span class="tag {{ 'ok' if line.state == 'OK' else 'bad' }}">{{ line.state }}</span></td>
+          <td tabindex="0">{{ line.note }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="block">
+  <div class="block-head">
+    <h2 class="h2">导出（与窗口、采样、合计同源）</h2>
+  </div>
+  <div class="scroll">
+    <table class="sheet-grid" data-sheet>
+      <thead><tr class="letters"><th class="gutter"></th><th>A</th><th>B</th></tr>
+      <tr class="cols"><th class="gutter">#</th><th>文件</th><th>地址</th></tr></thead>
+      <tbody>
+        {% for f in exports.files %}
+        <tr><th class="gutter">{{ loop.index }}</th><td tabindex="0">{{ f.name }}</td>
+        <td tabindex="0"><a class="link mono" href="{{ f.path }}">{{ f.path }}</a></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/publish.js"></script>
+{% endblock %}
